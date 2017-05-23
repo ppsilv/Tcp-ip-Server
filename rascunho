@@ -1,0 +1,181 @@
+#include<stdio.h> 
+#include <stdlib.h>
+#include<string.h>
+#include<sys/socket.h>
+#include<arpa/inet.h>
+#include<pthread.h> 
+
+#include "msg_probe.h"
+typedef struct __sonda CLIENTES_SONDA;
+
+struct __sonda{
+	CLIENTES_SONDA *p;
+	char ip[15+1];
+	int porta;
+	int qtdSent;
+	int dataLastSent[14+1];
+	int answer;//anser 0-not received, 1-received
+};
+
+CLIENTES_SONDA cli_sonda[10];
+
+//Parametros
+int sondaInterval=10;
+int sondaTotal=3;
+int action=100;
+
+void *thr_send(void *par);
+void mount_probe(TYPE_SONDA_MSG *msg,char *service);
+TYPE_SONDA_MSG msg;
+int main()
+{
+	int i;
+	CLIENTES_SONDA *p,*q;
+	
+	memset((void*)cli_sonda,0,sizeof(CLIENTES_SONDA)*10);
+	cli_sonda[0].p = (CLIENTES_SONDA*)malloc(sizeof(CLIENTES_SONDA));
+	memcpy(cli_sonda[0].p->ip,"10.177.3.13",11);
+	cli_sonda[0].p->porta=9887;
+	cli_sonda[0].p->qtdSent=987;	
+	cli_sonda[0].p->answer=100;	
+
+	cli_sonda[1].p = (CLIENTES_SONDA*)malloc(sizeof(CLIENTES_SONDA));
+	memcpy(cli_sonda[1].p->ip,"192.168.031.123",15);
+	cli_sonda[1].p->porta=9887;
+	cli_sonda[1].p->qtdSent=777;	
+	cli_sonda[1].p->answer=99;	
+	
+	cli_sonda[2].p = (CLIENTES_SONDA*)malloc(sizeof(CLIENTES_SONDA));
+	memcpy(cli_sonda[2].p->ip,"192.168.1.132",13);
+	cli_sonda[2].p->porta=9887;
+	cli_sonda[2].p->qtdSent=555;	
+	cli_sonda[2].p->answer=44;	
+
+	for(i=0;i< 10;i++){
+		if(cli_sonda[i].p > 0){
+			printf("****************************************************\n");
+			printf("valor de p[%ld]\n",cli_sonda[i].p);
+			printf("valor de sent  [%ld]\n",cli_sonda[i].p->qtdSent);
+			printf("valor de answer[%ld]\n",cli_sonda[i].p->answer);
+			q=cli_sonda[i].p;
+			printf("valor de q[%ld]\n",q);
+			printf("valor de ip     [%s]\n",q->ip);
+			printf("valor de porta  [%ld]\n",q->porta);
+			printf("valor de qtdSent[%ld]\n",q->porta);
+			printf("valor de answer.[%ld]\n",q->answer);
+		}
+	}
+	exit(0);
+	printf("****************************************************\n");
+	printf("valor de p[%ld]\n",cli_sonda[1].p);
+	printf("valor de sent  [%ld]\n",cli_sonda[1].p->qtdSent);
+	printf("valor de answer[%ld]\n",cli_sonda[1].p->answer);
+	q=cli_sonda[1].p;
+	printf("valor de q[%ld]\n",q);
+	printf("valor de ip     [%s]\n",q->ip);
+	printf("valor de porta  [%ld]\n",q->porta);
+	printf("valor de qtdSent[%ld]\n",q->qtdSent);
+	printf("valor de answer.[%ld]\n",q->answer);
+
+	printf("****************************************************\n");
+	printf("valor de p[%ld]\n",     cli_sonda[2].p);
+	printf("valor de sent  [%ld]\n",cli_sonda[2].p->qtdSent);
+	printf("valor de answer[%ld]\n",cli_sonda[2].p->answer);
+	q=cli_sonda[2].p;
+	printf("valor de q[%ld]\n",q);
+	printf("valor de ip     [%s]\n",q->ip);
+	printf("valor de porta  [%ld]\n",q->porta);
+	printf("valor de qtdSent[%ld]\n",q->qtdSent);
+	printf("valor de answer.[%ld]\n",q->answer);
+	
+	return (0);
+}
+int main1(int argc , char *argv[])
+{
+    int sock,size,*p;
+    struct sockaddr_in server;
+    char message[MAX_MESSAGE] , server_reply[MAX_MESSAGE];
+    pthread_t send_thread;
+	
+    //Create socket
+    sock = socket(AF_INET , SOCK_STREAM , 0);
+    if (sock == -1)
+    {
+        printf("Could not create socket");
+    }
+    printf("Socket created size struct[%d]\n",sizeof(TYPE_SONDA_MSG));
+     
+    server.sin_addr.s_addr = inet_addr("127.0.0.1");
+    server.sin_family = AF_INET;
+    server.sin_port = htons( 9887 );
+ 
+    //Connect to remote server
+    if (connect(sock , (struct sockaddr *)&server , sizeof(server)) < 0)
+    {
+        perror("connect failed. Error");
+        return 1;
+    }
+	if( (size=recv(sock , server_reply , MAX_MESSAGE , 0)) < 0){
+		puts("recv failed");
+		return -1;
+	}
+	server_reply[size]='\0';
+	printf("Server reply :");
+	puts(server_reply);
+     
+    puts("Connected\n");
+	p = &sock;
+	if( pthread_create( &send_thread , NULL ,  thr_send , (void*) p) < 0){
+		perror("could not create thread");
+		return 1;
+	}
+
+    //keep communicating with server
+    while(1){
+        //Receive a reply from the server
+        if( (size=recv(sock , server_reply , 2000 , 0)) < 0)
+        {
+            puts("recv failed");
+            break;
+        }
+        server_reply[size]='\0';
+        printf("\nServer reply :[%s]\n",server_reply);
+    }
+     
+    close(sock);
+    return 0;
+}
+
+void * thr_send(void *socket_desc)
+{
+	int sock = *(int*)socket_desc;
+	char message[MAX_MESSAGE],*p;
+    while(1){
+        printf("Enter message : ");
+        scanf("%s" , message);
+        if( strcmp(message,"msg") == 0 ){
+			mount_probe(&msg,NULL);
+			p = (char *)&msg;
+			printf("Sending size...[%04d]\n",sizeof(TYPE_SONDA_MSG));
+			sprintf(message,"%04d",sizeof(TYPE_SONDA_MSG));
+			if( send(sock , message , 4 , 0) < 0) {
+				printf("Send failed\n");
+				exit(-1);
+			}
+			sleep(1); //enable this if you want to test server reading in 2 times
+			printf("Sending data...[%s]\n",p);
+			if( send(sock , p , sizeof(TYPE_SONDA_MSG) , 0) < 0) {
+				printf("Send failed\n");
+				exit(-1);
+			}
+			continue;
+		}		
+        //Send some data
+        printf("Sending data...[%s]\n",message);
+        if( send(sock , message , strlen(message) , 0) < 0) {
+            puts("Send failed");
+            exit(-1);
+        }
+    }
+
+}
